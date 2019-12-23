@@ -23,6 +23,48 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
+from face.Face import FaceVis, FaceModel
+import os
+import torch
+import torch.nn as nn
+import numpy as np
+
+def recover_ori(exp):
+    # exp: H X W X C
+
+    # Normalize data
+    # x mean = -0.03465565666556358
+    # x std = 4.96116828918457
+    # y mean = -1.4577744007110596
+    # y std = 6.710243225097656
+    # z mean = 5.440230369567871
+    # z std = 3.930370330810547
+    x_mean = torch.from_numpy(np.array([-0.0347]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    x_std = torch.from_numpy(np.array([4.9612]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    y_mean = torch.from_numpy(np.array([-1.4578]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    y_std = torch.from_numpy(np.array([6.7102]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    z_mean = torch.from_numpy(np.array([5.4402]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    z_std = torch.from_numpy(np.array([3.9304]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+
+    # Adapt dimension
+
+    ori_exp_x = exp[:, :, 0].unsqueeze(-1)*x_std+x_mean # H X W X 1
+    ori_exp_y = exp[:, :, 1].unsqueeze(-1)*y_std+y_mean 
+    ori_exp_z = exp[:, :, 2].unsqueeze(-1)*z_std+z_mean
+
+    ori_exp = torch.cat((ori_exp_x, ori_exp_y, ori_exp_z), dim=-1) # H X W X 3
+
+    return ori_exp # H X W X 3
+
+def vis_geometry(pc_tensor, out_obj_path):
+    # load template
+    face_model = FaceModel()
+
+    # convert pc to facial mesh
+    face_model.update_pc(pc_tensor)
+
+    # save to output
+    face_model.export_to_obj(out_obj_path)
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
@@ -54,6 +96,12 @@ if __name__ == '__main__':
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 save_result = total_iters % opt.update_html_freq == 0
                 model.compute_visuals()
+                if not os.path.exists(opt.objpath):
+                    os.makedirs(opt.objpath)
+                for name, image in model.get_current_visuals().items():
+                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
+                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                    vis_geometry(pc_tensor, save_obj_path)
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
