@@ -31,26 +31,19 @@ import numpy as np
 
 def recover_ori(exp):
     # exp: H X W X C
+    exp = (exp+1)/2 # 0~1
 
-    # Normalize data
-    # x mean = -0.03465565666556358
-    # x std = 4.96116828918457
-    # y mean = -1.4577744007110596
-    # y std = 6.710243225097656
-    # z mean = 5.440230369567871
-    # z std = 3.930370330810547
-    x_mean = torch.from_numpy(np.array([-0.0347]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    x_std = torch.from_numpy(np.array([4.9612]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_mean = torch.from_numpy(np.array([-1.4578]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_std = torch.from_numpy(np.array([6.7102]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_mean = torch.from_numpy(np.array([5.4402]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_std = torch.from_numpy(np.array([3.9304]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    image_size = 256
+    x_min = torch.from_numpy(np.array([-10.7578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    x_max = torch.from_numpy(np.array([11.5546875]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    y_min = torch.from_numpy(np.array([-22.625]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    y_max = torch.from_numpy(np.array([14.578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    z_min = torch.from_numpy(np.array([-6.078125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    z_max = torch.from_numpy(np.array([14.125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
 
-    # Adapt dimension
-
-    ori_exp_x = exp[:, :, 0].unsqueeze(-1)*x_std+x_mean # H X W X 1
-    ori_exp_y = exp[:, :, 1].unsqueeze(-1)*y_std+y_mean 
-    ori_exp_z = exp[:, :, 2].unsqueeze(-1)*z_std+z_mean
+    ori_exp_x = exp[:, :, 0].unsqueeze(-1)*(x_max-x_min)+x_min # H X W X 1
+    ori_exp_y = exp[:, :, 1].unsqueeze(-1)*(y_max-y_min)+y_min 
+    ori_exp_z = exp[:, :, 2].unsqueeze(-1)*(z_max-z_min)+z_min
 
     ori_exp = torch.cat((ori_exp_x, ori_exp_y, ori_exp_z), dim=-1) # H X W X 3
 
@@ -93,16 +86,16 @@ if __name__ == '__main__':
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 
-            if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
-                save_result = total_iters % opt.update_html_freq == 0
-                model.compute_visuals()
-                if not os.path.exists(opt.objpath):
-                    os.makedirs(opt.objpath)
-                for name, image in model.get_current_visuals().items():
-                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
-                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-                    vis_geometry(pc_tensor, save_obj_path)
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+            # if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
+            #     save_result = total_iters % opt.update_html_freq == 0
+            #     model.compute_visuals()
+            #     if not os.path.exists(opt.objpath):
+            #         os.makedirs(opt.objpath)
+            #     for name, image in model.get_current_visuals().items():
+            #         save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
+            #         pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+            #         vis_geometry(pc_tensor, save_obj_path)
+            #     visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
@@ -111,16 +104,16 @@ if __name__ == '__main__':
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
 
-            if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
-                print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
-                save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
-                model.save_networks(save_suffix)
+            # if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
+            #     print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
+            #     save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
+            #     model.save_networks(save_suffix)
 
             iter_data_time = time.time()
-        if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-            print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
-            model.save_networks('latest')
-            model.save_networks(epoch)
+        # if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
+        #     print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
+        #     model.save_networks('latest')
+        #     model.save_networks(epoch)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
         model.update_learning_rate()                     # update learning rates at the end of every epoch.

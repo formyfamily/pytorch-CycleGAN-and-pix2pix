@@ -55,12 +55,12 @@ class FaceModel:
         self.albedo = to_numpy(al)
 
     def export_to_obj(self, path):
-        mtl_path = path.replace('.obj', '.mtl')
-        al_path = path.replace('.obj', '.albedo.png')
+        # mtl_path = path.replace('.obj', '.mtl')
+        # al_path = path.replace('.obj', '.albedo.png')
 
         # write obj
         file = open(path, 'w')
-        file.write('mtllib ./%s\n' % os.path.basename(mtl_path))
+        # file.write('mtllib ./%s\n' % os.path.basename(mtl_path))
         for v in self.mesh.vertices:
             file.write('v %.6f %.6f %.6f\n' % (v[0], v[1], v[2]))
         for vt in self.mesh.tex_coords:
@@ -73,18 +73,18 @@ class FaceModel:
         file.close()
 
         # write mtl
-        file = open(mtl_path, 'w')
-        file.write('''newmtl Textured
-Ka 1.000 1.000 1.000
-Kd 1.000 1.000 1.000
-Ks 0.000 0.000 0.000
-d 1.0
-illum 2
-''')
-        file.write('map_Ka %s\n' % os.path.basename(al_path))
-        file.close()
+#         file = open(mtl_path, 'w')
+#         file.write('''newmtl Textured
+# Ka 1.000 1.000 1.000
+# Kd 1.000 1.000 1.000
+# Ks 0.000 0.000 0.000
+# d 1.0
+# illum 2
+# ''')
+#         file.write('map_Ka %s\n' % os.path.basename(al_path))
+#        file.close()
 
-        imageio.imwrite(al_path, self.albedo)
+        # imageio.imwrite(al_path, self.albedo)
 
 
 class FaceVis:

@@ -17,12 +17,12 @@ def normalize(exp):
     # y std = 6.710243225097656
     # z mean = 5.440230369567871
     # z std = 3.930370330810547
-    x_mean = torch.from_numpy(np.array([-0.0347]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    x_std = torch.from_numpy(np.array([4.9612]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_mean = torch.from_numpy(np.array([-1.4578]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_std = torch.from_numpy(np.array([6.7102]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_mean = torch.from_numpy(np.array([5.4402]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_std = torch.from_numpy(np.array([3.9304]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    x_mean = torch.from_numpy(np.array([-0.03465565666556358]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    x_std = torch.from_numpy(np.array([4.96116828918457]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    y_mean = torch.from_numpy(np.array([-1.4577744007110596]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    y_std = torch.from_numpy(np.array([6.710243225097656]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    z_mean = torch.from_numpy(np.array([5.440230369567871]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
+    z_std = torch.from_numpy(np.array([3.930370330810547]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
 
     # Adapt dimension
 
@@ -33,6 +33,27 @@ def normalize(exp):
     normalized_exp = torch.cat((normalized_exp_x, normalized_exp_y, normalized_exp_z), dim=-1) # H X W X 3
 
     return normalized_exp # H X W X 3
+
+def scale_to_range(exp):
+    # x_min =  -10.75, x_max = 11.5546875, y_min = -22.625, y_max = 14.578125, z_min = -6.078125, z_max = 14.125
+    image_size = 256
+    x_min = torch.from_numpy(np.array([-10.7578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    x_max = torch.from_numpy(np.array([11.5546875]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    y_min = torch.from_numpy(np.array([-22.625]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    y_max = torch.from_numpy(np.array([14.578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    z_min = torch.from_numpy(np.array([-6.078125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    z_max = torch.from_numpy(np.array([14.125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+
+    # Normalize to 0~1
+    normalized_exp_x = (exp[:, :, 0].unsqueeze(-1)-x_min)/(x_max-x_min) # H X W X 1
+    normalized_exp_y = (exp[:, :, 1].unsqueeze(-1)-y_min)/(y_max-y_min)
+    normalized_exp_z = (exp[:, :, 2].unsqueeze(-1)-z_min)/(z_max-z_min)
+
+    normalized_exp = torch.cat((normalized_exp_x, normalized_exp_y, normalized_exp_z), dim=-1) # H X W X 3
+
+    scaled_exp = normalized_exp*2-1 # Scale to -1 ~1
+
+    return scaled_exp
 
 class FacexDataset(BaseDataset):
     """
@@ -52,10 +73,12 @@ class FacexDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
-        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/zkuang/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
-        self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/zkuang/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
+        # self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
+        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
+        self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
 
-        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
+        # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
+        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, prefix="20191002_RyanWatson"))   # load images from '/path/to/data/trainA'
         self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, prefix="20190429_MichaelTrejo"))    # load images from '/path/to/data/trainB'
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
@@ -81,9 +104,13 @@ class FacexDataset(BaseDataset):
             index_B = index % self.B_size
         else:   # randomize the index for domain B to avoid fixed pairs.
             index_B = random.randint(0, self.B_size - 1)
+        index_B = index % self.A_size # For pix2pix training
         B_path = self.B_paths[index_B]
-        A = normalize(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        B = normalize(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
+        # A = normalize(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
+        # B = normalize(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
+
+        A = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
+        B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
         # import pdb
         # pdb.set_trace()
         # A_img = Image.open(A_path).convert('RGB')

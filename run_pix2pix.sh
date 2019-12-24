@@ -1,0 +1,11 @@
+python train.py \
+--objpath ./result_obj/face_pix2pix \
+--gpu_ids 5 \
+--dataroot /home/ICT2000/jli/local/data \
+--name face_pix2pix \
+--model pix2pix \
+--direction BtoA \
+--load_size 256 \
+--no_flip \
+--dataset_mode facex \
+--num_threads 4
