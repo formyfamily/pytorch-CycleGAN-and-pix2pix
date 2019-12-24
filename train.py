@@ -86,16 +86,16 @@ if __name__ == '__main__':
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 
-            # if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
-            #     save_result = total_iters % opt.update_html_freq == 0
-            #     model.compute_visuals()
-            #     if not os.path.exists(opt.objpath):
-            #         os.makedirs(opt.objpath)
-            #     for name, image in model.get_current_visuals().items():
-            #         save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
-            #         pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-            #         vis_geometry(pc_tensor, save_obj_path)
-            #     visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+            if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
+                save_result = total_iters % opt.update_html_freq == 0
+                model.compute_visuals()
+                if not os.path.exists(opt.objpath):
+                    os.makedirs(opt.objpath)
+                for name, image in model.get_current_visuals().items():
+                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
+                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                    vis_geometry(pc_tensor, save_obj_path)
+                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()
@@ -104,16 +104,16 @@ if __name__ == '__main__':
                 if opt.display_id > 0:
                     visualizer.plot_current_losses(epoch, float(epoch_iter) / dataset_size, losses)
 
-            # if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
-            #     print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
-            #     save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
-            #     model.save_networks(save_suffix)
+            if total_iters % opt.save_latest_freq == 0:   # cache our latest model every <save_latest_freq> iterations
+                print('saving the latest model (epoch %d, total_iters %d)' % (epoch, total_iters))
+                save_suffix = 'iter_%d' % total_iters if opt.save_by_iter else 'latest'
+                model.save_networks(save_suffix)
 
             iter_data_time = time.time()
-        # if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-        #     print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
-        #     model.save_networks('latest')
-        #     model.save_networks(epoch)
+        if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
+            print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
+            model.save_networks('latest')
+            model.save_networks(epoch)
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))
         model.update_learning_rate()                     # update learning rates at the end of every epoch.
