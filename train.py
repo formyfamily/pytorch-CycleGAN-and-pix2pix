@@ -91,10 +91,10 @@ if __name__ == '__main__':
                 model.compute_visuals()
                 if not os.path.exists(opt.objpath):
                     os.makedirs(opt.objpath)
-                for name, image in model.get_current_visuals().items():
-                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
-                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-                    vis_geometry(pc_tensor, save_obj_path)
+                # for name, image in model.get_current_visuals().items():
+                #     save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
+                #     pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                #     vis_geometry(pc_tensor, save_obj_path)
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
