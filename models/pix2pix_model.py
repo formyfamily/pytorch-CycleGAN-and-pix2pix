@@ -113,8 +113,8 @@ class Pix2PixModel(BaseModel):
         # Second, G(A) = B
         self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
-        # self.loss_G = self.loss_G_L1 # For debug use, only keep l1 loss
+        # self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_L1 # For debug use, only keep l1 loss
         self.loss_G.backward()
 
     def optimize_parameters(self):
