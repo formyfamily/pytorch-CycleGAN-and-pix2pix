@@ -115,8 +115,8 @@ class FacexDataset(BaseDataset):
         # A = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
         # B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
 
-        B = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        A = torch.FloatTensor(imageio.imread(B_path)).transpose(0, 2).transpose(1, 2)
+        B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
+        A = torch.FloatTensor(imageio.imread(A_path)).transpose(0, 2).transpose(1, 2)
 
         # import pdb
         # pdb.set_trace()
