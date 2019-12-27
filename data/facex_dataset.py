@@ -74,9 +74,9 @@ class FacexDataset(BaseDataset):
         """
         BaseDataset.__init__(self, opt)
         # self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
-        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
+        self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
         # self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
-        self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo")
+        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo")
 
         # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
         # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, prefix="20191002_RyanWatson"))   # load images from '/path/to/data/trainA'
@@ -115,8 +115,8 @@ class FacexDataset(BaseDataset):
         # A = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
         # B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
 
-        A = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        B = torch.FloatTensor(imageio.imread(B_path)).transpose(0, 2).transpose(1, 2)
+        B = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
+        A = torch.FloatTensor(imageio.imread(B_path)).transpose(0, 2).transpose(1, 2)
 
         # import pdb
         # pdb.set_trace()
