@@ -102,7 +102,7 @@ if __name__ == '__main__':
             os.makedirs(opt.objpath)
         for name, image in model.get_current_visuals().items():
             if name != "real_A":
-                save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(i, name))
+                save_obj_path = os.path.join(opt.objpath, opt.name, "%d_%s.obj"%(i, name))
                 pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
                 vis_geometry(pc_tensor, save_obj_path)
         save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)

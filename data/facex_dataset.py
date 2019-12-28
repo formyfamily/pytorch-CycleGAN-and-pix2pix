@@ -6,6 +6,11 @@ import imageio
 import random
 import torch
 import numpy as np
+import json
+
+def load_img(filename):
+    _format = 'EXR-FI' if filename.split(".")[-1] == "exr" else None
+    return imageio.imread(filename, format=_format)
 
 def normalize(exp):
     # exp: H X W X C
@@ -73,35 +78,66 @@ class FacexDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
+
+        self.ids_dic = json.load(open(opt.jsonfile, 'r'))
+
+        self.ids = []
+        for k in self.ids_dic.keys():
+            self.ids.append(int(k))
+
+        self.ls_expression_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned"
+        self.tr_expression_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/PointCloud_Aligned"
+        self.bs_folder = "/home/ICT2000/jli/local/data/Blendshapes_256_exr"
+
+        self.mask = torch.FloatTensor(np.load("mask.npy"))[:,:,None]
+
         #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
-        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
-        self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
         # self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
         #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo")
 
         # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
         # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, prefix="20191002_RyanWatson"))   # load images from '/path/to/data/trainA'
         # self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, prefix="20190429_MichaelTrejo"))    # load images from '/path/to/data/trainB'
-        self.temp_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
 
-        self.A_paths = []
-        self.B_paths = []
-        for temp_path in self.temp_paths:
-            temp_neutral = temp_path[:-17]+"01"+temp_path[-15:]
-            if os.path.exists(temp_neutral):
-               self.A_paths.append(temp_path) 
-               self.B_paths.append(temp_path) 
-
-        random.shuffle(self.A_paths)
-        random.shuffle(self.B_paths)
-
-        self.A_size = len(self.A_paths)  # get the size of dataset A
-        self.B_size = len(self.B_paths)  # get the size of dataset B
-        self.mask = torch.FloatTensor(np.load("mask.npy"))
         btoA = self.opt.direction == 'BtoA'
         input_nc = self.opt.output_nc if btoA else self.opt.input_nc       # get the number of channels of input image
         output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
+        self.identity_mode = opt.identity_mode
 
+    def load_single_subject(self, index, exp_idx):
+        source = self.ids_dic[index]['source']
+        f_tag_list = self.ids_dic[index]['f_tag'] # Already sorted
+
+        if source == "ls":
+            expression_folder = self.ls_expression_folder
+        elif source == "tr":
+            expression_folder = self.tr_expression_folder
+        elif source == "template":
+            expression_folder = self.bs_folder
+
+        f_tag = f_tag_list[exp_idx]
+        expression_f_name = f_tag + "_pointcloud.exr"
+        expression_f_path = os.path.join(expression_folder, expression_f_name)
+        exp_img = torch.from_numpy(load_img(expression_f_path)).float() # H X W X C
+        scaled_exp = scale_to_range(exp_img)
+        masked_scaled_img = self.mask*scaled_exp
+
+        return masked_scaled_img.transpose(0, 2).transpose(1, 2) # C X H X W
+
+    def load_neutral_face(self, index):
+        if self.ids_dic[index]['source'] == "template":
+            neutral_f_path = os.path.join(self.bs_folder, "Neutral_pointcloud.exr")
+            neutral_img = torch.from_numpy(load_img(neutral_f_path)).float() # H X W X C
+            scaled_neutral = scale_to_range(neutral_img)
+            masked_scaled_neutral = self.mask*scaled_neutral
+            neutral_face = masked_scaled_neutral.transpose(0, 2).transpose(1, 2) # C X H X W
+        elif self.ids_dic[index]['source'] == "ls":
+            neutral_face = self.load_single_subject(index, 1)
+        elif self.ids_dic[index]['source'] == "tr":
+            neutral_face = self.load_single_subject(index, 0)
+
+        return neutral_face 
+        
     def __getitem__(self, index):
         """Return a data point and its metadata information.
 
@@ -114,46 +150,76 @@ class FacexDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        A_path = self.A_paths[index % self.A_size]  # make sure index is within then range
-        if self.opt.serial_batches:   # make sure index is within then range
-            index_B = index % self.B_size
-        else:   # randomize the index for domain B to avoid fixed pairs.
-            index_B = random.randint(0, self.B_size - 1)
-        index_B = index % self.A_size # For pix2pix training
-        B_path = self.B_paths[index_B]
+        index %= len(self.ids)
+        p_a_idx = str(index)
+
+        l1_mask = 0 # Indicate whether current example need l1 loss, depending on whether two sampled subject idx are from same source 
+        selfrecon_mask = 0
+
+        # Random sample one subject idx
+        if np.random.randint(100) > 80: # has 20 percent of chance to generate self reconstruction data
+            p_b_idx = p_a_idx
+            selfrecon = 1
+        else:
+            p_b_idx = str(np.random.randint(len(self.ids)))
+            selfrecon = 0
+
+        # Load neutral face 
+        if self.identity_mode == 1 and self.ids_dic[p_a_idx]['source'] == self.ids_dic[p_b_idx]['source']: # use same expression
+            num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            A_neutral = self.load_single_subject(p_a_idx, exp_idx)
+            B_neutral = self.load_single_subject(p_b_idx, exp_idx)
+        elif self.identity_mode == 2: # Use different expressions
+            num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            A_neutral = self.load_single_subject(p_a_idx, exp_idx)
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            B_neutral = self.load_single_subject(p_b_idx, exp_idx)
+        else: # use neutral face
+            A_neutral = self.load_neutral_face(p_a_idx)
+            B_neutral = self.load_neutral_face(p_b_idx)
         
-        A_neutral_path = A_path[:-17]+"01"+A_path[-15:]
-        A_expression_index = A_path[-17:-15]
-        B_neutral_path = B_path[:-17]+"01"+B_path[-15:]
-        B_path = B_path[:-17]+A_expression_index+B_path[-15:]
 
-        if not os.path.exists(B_path):
-            return self.__getitem__((index+1)%self.__len__())
+        if selfrecon == 1: # self reconstruction case
+            num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
 
-        # A = normalize(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        # B = normalize(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            A = self.load_single_subject(p_a_idx, exp_idx) # C X H X W
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
 
-        A = scale_to_range(torch.FloatTensor(imageio.imread(A_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
+            # diff_exp_idx = np.random.randint(num_expressions) # Index for single expression
+            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, diff_exp_idx) # C X H X W
 
-        # B = scale_to_range(torch.FloatTensor(imageio.imread(B_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        # A = torch.FloatTensor(imageio.imread(A_path)).transpose(0, 2).transpose(1, 2) * self.mask
-        A_neutral = scale_to_range(torch.FloatTensor(imageio.imread(A_neutral_path))).transpose(0, 2).transpose(1, 2) * self.mask
-        B_neutral = scale_to_range(torch.FloatTensor(imageio.imread(B_neutral_path))).transpose(0, 2).transpose(1, 2) * self.mask
+            l1_mask = 1
+        elif self.ids_dic[p_a_idx]['source'] == self.ids_dic[p_b_idx]['source']:
+            num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            
+            A = self.load_single_subject(p_a_idx, exp_idx) # C X H X W
+            B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
 
-        # A_img = Image.open(A_path).convert('RGB')
-        # B_img = Image.open(B_path).convert('RGB')
-        # # apply image transformation
-        # A = self.transform_A(A_img)
-        # B = self.transform_B(B_img)
+            # diff_exp_idx = np.random.randint(num_expressions) # Index for single expression
+            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, diff_exp_idx) # C X H X W
 
+            l1_mask = 1
+        else: # No pair data for current sample
+            num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            A = self.load_single_subject(p_a_idx, exp_idx) # C X H X W
 
-        return {'A': torch.cat((A, A_neutral, B_neutral), dim=0), 'B': B, 'A_paths': A_path, 'B_paths': B_path}
+            num_expressions = len(self.ids_dic[p_b_idx]['f_tag'])
+            exp_idx = np.random.randint(num_expressions) # Index for single expression
+            B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
+
+            # num_expressions = len(self.ids_dic[p_b_idx]['f_tag'])
+            # exp_idx = np.random.randint(num_expressions) # Index for single expression
+            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
+
+            l1_mask = 0
+        return {'A': torch.cat((A, A_neutral, B_neutral), dim=0), 'B': B, 'A_paths': "A", 'B_paths': "B", 'l1_mask': l1_mask}
 
     def __len__(self):
-        """Return the total number of images in the dataset.
+        return len(self.ids)*20
 
-        As we have two datasets with potentially different number of images,
-        we take a maximum of
-        """
-        return max(self.A_size, self.B_size)

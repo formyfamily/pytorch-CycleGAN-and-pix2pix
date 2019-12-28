@@ -89,7 +89,8 @@ class Pix2PixModel(BaseModel):
         self.B_neutral = self.real_A[:, 6:9]
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral
-        self.image_paths = input['A_paths' if AtoB else 'B_paths']
+        self.l1_mask = input["l1_mask"][:,None,None,None].float().to(self.device)
+        #self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
@@ -120,10 +121,10 @@ class Pix2PixModel(BaseModel):
         pred_fake = self.netD(fake_AB)
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
-        self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        self.loss_G_L1 = self.criterionL1(self.fake_B * self.l1_mask, self.real_B * self.l1_mask) * self.opt.lambda_L1
         # combine loss and calculate gradients
-        # self.loss_G = self.loss_G_GAN + self.loss_G_L1
-        self.loss_G = self.loss_G_L1 # For debug use, only keep l1 loss
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        #self.loss_G = self.loss_G_L1 # For debug use, only keep l1 loss
         self.loss_G.backward()
 
     def optimize_parameters(self):
