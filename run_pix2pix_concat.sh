@@ -1,0 +1,16 @@
+python train.py \
+--display_port 10002 \
+--input_nc 9 \
+--lambda_L1 100 \
+--no_dropout \
+--objpath ./result_obj/face_pix2pix_l1_only \
+--gpu_ids 0 \
+--dataroot /home/ICT2000/jli/local/data \
+--name face_pix2pix_l1_only \
+--model pix2pix \
+--direction AtoB \
+--load_size 256 \
+--no_flip \
+--dataset_mode facex \
+--num_threads 4 \
+--epoch_count 30

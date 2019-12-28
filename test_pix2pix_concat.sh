@@ -1,0 +1,13 @@
+python test.py \
+--input_nc 9 \
+--no_dropout \
+--objpath ./test_result_obj/face_pix2pix_l1_only \
+--gpu_ids 0 \
+--dataroot /home/ICT2000/jli/local/data \
+--name face_pix2pix_l1_only \
+--model pix2pix \
+--direction AtoB \
+--load_size 256 \
+--no_flip \
+--dataset_mode facex \
+--num_threads 4 

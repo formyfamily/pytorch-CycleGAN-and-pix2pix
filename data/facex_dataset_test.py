@@ -74,26 +74,28 @@ class FacexDataset(BaseDataset):
         """
         BaseDataset.__init__(self, opt)
         #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
-        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
+        self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
+        #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
         self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainA'
         # self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
         #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo")
 
-        # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
+        self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
         # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, prefix="20191002_RyanWatson"))   # load images from '/path/to/data/trainA'
-        # self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, prefix="20190429_MichaelTrejo"))    # load images from '/path/to/data/trainB'
-        self.temp_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
+        self.temp_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, prefix="20190429_MichaelTrejo"))    # load images from '/path/to/data/trainB'
+        # self.temp_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size))   # load images from '/path/to/data/trainA'
 
-        self.A_paths = []
+        #self.A_paths = []
         self.B_paths = []
         for temp_path in self.temp_paths:
             temp_neutral = temp_path[:-17]+"01"+temp_path[-15:]
             if os.path.exists(temp_neutral):
-               self.A_paths.append(temp_path) 
+               #self.A_paths.append(temp_path) 
                self.B_paths.append(temp_path) 
 
-        random.shuffle(self.A_paths)
-        random.shuffle(self.B_paths)
+        self.temp_paths = self.A_paths
+        self.A_paths = self.B_paths
+        self.B_paths = self.temp_paths
 
         self.A_size = len(self.A_paths)  # get the size of dataset A
         self.B_size = len(self.B_paths)  # get the size of dataset B
@@ -120,12 +122,14 @@ class FacexDataset(BaseDataset):
         else:   # randomize the index for domain B to avoid fixed pairs.
             index_B = random.randint(0, self.B_size - 1)
         index_B = index % self.A_size # For pix2pix training
+        index_B = 0
         B_path = self.B_paths[index_B]
         
+        # A_neutral_path = "/home/ICT2000/jli/local/data/Blendshapes_256_exr/Neutral_pointcloud.exr"
+        # B_neutral_path = B_path[:-17]+"01"+B_path[-15:]
+
+        B_neutral_path = "/home/ICT2000/jli/local/data/Blendshapes_256_exr/Neutral_pointcloud.exr"
         A_neutral_path = A_path[:-17]+"01"+A_path[-15:]
-        A_expression_index = A_path[-17:-15]
-        B_neutral_path = B_path[:-17]+"01"+B_path[-15:]
-        B_path = B_path[:-17]+A_expression_index+B_path[-15:]
 
         if not os.path.exists(B_path):
             return self.__getitem__((index+1)%self.__len__())
@@ -156,4 +160,4 @@ class FacexDataset(BaseDataset):
         As we have two datasets with potentially different number of images,
         we take a maximum of
         """
-        return max(self.A_size, self.B_size)
+        return self.A_size
