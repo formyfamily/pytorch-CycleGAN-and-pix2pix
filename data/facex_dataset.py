@@ -13,8 +13,6 @@ def load_img(filename):
     return imageio.imread(filename, format=_format)
 
 def scale_to_range(exp):
-    # x_min =  -10.75, x_max = 11.5546875, y_min = -22.625, y_max = 14.578125, z_min = -6.078125, z_max = 14.125
-    image_size = 256
     x_min = -10.7578125
     x_max = 11.5546875
     y_min = -22.625
