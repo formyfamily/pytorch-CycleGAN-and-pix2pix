@@ -5,7 +5,7 @@ python train.py \
 --lambda_L1 100 \
 --no_dropout \
 --objpath ./result_obj \
---gpu_ids 2,3,4,5,6,7,8,9 \
+--gpu_ids 9 \
 --dataroot /home/ICT2000/jli/local/data \
 --model pix2pixbs \
 --direction AtoB \
