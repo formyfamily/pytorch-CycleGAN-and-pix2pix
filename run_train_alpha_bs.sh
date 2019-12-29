@@ -1,6 +1,6 @@
 python train.py \
 --name face_pix2pix_alpha_bs \
---display_port 10002 \
+--display_port 12345 \
 --input_nc 9 \
 --lambda_L1 100 \
 --no_dropout \
@@ -11,6 +11,8 @@ python train.py \
 --direction AtoB \
 --load_size 256 \
 --no_flip \
---dataset_mode facebs \
 --num_threads 0 \
---jsonfile ./train_all_data.json
+--jsonfile ./train_all_data.json \
+--alternate_epoch 30 \
+--alternate_iter 5 \
+--display_freq 300

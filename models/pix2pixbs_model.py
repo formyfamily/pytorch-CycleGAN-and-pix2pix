@@ -49,7 +49,8 @@ class Pix2PixBSModel(BaseModel):
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         # self.visual_names = ['real_A', 'fake_B', 'real_B']
-        self.visual_names = ['real_A_input', 'A_neutral', 'B_neutral', 'fake_B', 'real_B', 'offset_A', 'offset_B', 'offset_fake_B', 'simple_B']
+        self.visual_names = ['real_A_input', 'A_neutral', 'B_neutral', 'fake_B', 'real_B', \
+        'offset_A', 'offset_B', 'offset_fake_B', 'simple_B', 'composed_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain:
             self.model_names = ['G', 'D']
@@ -78,7 +79,7 @@ class Pix2PixBSModel(BaseModel):
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
 
-    def set_input(self, input):
+    def set_input(self, input, pair_flag=True):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
@@ -86,68 +87,108 @@ class Pix2PixBSModel(BaseModel):
 
         The option 'direction' can be used to swap images in domain A and domain B.
         """
-        self.real_A = input['A'].to(self.device) # 1 X 55 X 9 X H X W
-        self.real_A_input = self.real_A[:, :, 0:3, :, :] # blendshapes BS(1) X 55 X 3 X H X W
-        self.A_neutral = self.real_A[:, :, 3:6, :, :] # template neutral face
-        self.B_neutral = self.real_A[:, :, 6:9, :, :] # subject neutral face
-        self.real_B = input['B'].to(self.device) # 1 X 3 X H X W, random selected subject expression
-        # self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral
-        # self.l1_mask = input["l1_mask"][:,None,None,None].float().to(self.device)
-        #self.image_paths = input['A_paths' if AtoB else 'B_paths']
-        self.alpha_idx = input['alpha'] # BS(1) indicate which line in self.alpha_mat we should use
+        if pair_flag: # paired data training
+            self.real_A = input['A'].to(self.device) # 1 X 9 X H X W
+            self.real_A_input = self.real_A[:, 0:3] # 1 X 3 X H X W
+            self.A_neutral = self.real_A[:, 3:6]
+            self.B_neutral = self.real_A[:, 6:9]
+            self.real_B = input['B'].to(self.device) # 1 X 3 X H X W
+            self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral
+            self.l1_mask = input["l1_mask"][:,None,None,None].float().to(self.device) # 1 X 1 X 1 X 1
+        else: # blendshape data training
+            self.real_A = input['A'].to(self.device) # 1 X 55 X 9 X H X W
+            self.real_A_input = self.real_A[:, :, 0:3, :, :] # blendshapes BS(1) X 55 X 3 X H X W
+            self.A_neutral = self.real_A[:, :, 3:6, :, :] # template neutral face, 1 X 55 X 3 X H X W
+            self.B_neutral = self.real_A[:, :, 6:9, :, :] # subject neutral face, 1 X 55 X 3 X H X W
+            self.real_B = input['B'].to(self.device) # 1 X 3 X H X W, random selected subject expression
+            self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral # 1 X 55 X 3 X H X W, subject neutral + template bs offsets
+            self.alpha_idx = input['alpha'] # BS(1) indicate which line in self.alpha_mat we should use
 
-    def forward(self):
+    def forward(self, pair_flag=True):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        batch_size, num_blend, c, h, w = self.real_A.size()
-        self.fake_B = self.netG(self.real_A.view(batch_size*num_blend, c, h, w)).view(batch_size, num_blend, c//3, h, w)  # G(A) 1 X 55 X 3 X H X W
-        self.offset_A = (self.real_A_input - self.A_neutral)*10 # Template blendshape offsets 1 X 55 X 3 X H X W
-        self.offset_B = (self.real_B.unsqueeze(0) - self.B_neutral)*10 # useless in current case
-        self.offset_fake_B = (self.fake_B - self.B_neutral)*10 # 1 X 55 X 3 X H X W
+        if pair_flag:
+            self.fake_B = self.netG(self.real_A)  # G(A) 1 X 3 X H X W
+            self.offset_A = (self.real_A_input - self.A_neutral)*10
+            self.offset_B = (self.real_B - self.B_neutral)*10
+            self.offset_fake_B = (self.fake_B - self.B_neutral)*10
+        else:
+            batch_size, num_blend, c, h, w = self.real_A.size()
+            self.fake_B = self.netG(self.real_A.view(batch_size*num_blend, c, h, w)).view(batch_size, num_blend, c//3, h, w)  # G(A) 1 X 55 X 3 X H X W
+            self.offset_A = (self.real_A_input - self.A_neutral)*10 # Template blendshape offsets 1 X 55 X 3 X H X W
+            self.offset_B = (self.real_B.unsqueeze(0) - self.B_neutral)*10 # useless in current case
+            self.offset_fake_B = (self.fake_B - self.B_neutral)*10 # 1 X 55 X 3 X H X W, personalized blendshape offsets
 
-    def backward_D(self):
+    def backward_D(self, pair_flag=True):
         """Calculate GAN loss for the discriminator"""
-        # Fake; stop backprop to the generator by detaching fake_B
-        fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)  
-        # we use conditional GANs; we need to feed both input and output to the discriminator
-        # 55 X 6 X H X W
-        pred_fake = self.netD(fake_AB.detach()) # 55 X 1 X 30 X 30
-        self.loss_D_fake = self.criterionGAN(pred_fake, False)
-        # Real
-        real_AB = torch.cat((self.offset_A.squeeze(0), self.offset_B.squeeze(0)), 1)
-        pred_real = self.netD(real_AB)
-        self.loss_D_real = self.criterionGAN(pred_real, True) # not used in current case
-        # combine loss and calculate gradients
-        # self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
-        self.loss_D = self.loss_D_fake
-        self.loss_D.backward()
+        if pair_flag:
+            # Fake; stop backprop to the generator by detaching fake_B
+            fake_AB = torch.cat((self.offset_A, self.offset_fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+            pred_fake = self.netD(fake_AB.detach())
+            self.loss_D_fake = self.criterionGAN(pred_fake, False)
+            # Real
+            real_AB = torch.cat((self.offset_A, self.offset_B), 1)
+            pred_real = self.netD(real_AB)
+            self.loss_D_real = self.criterionGAN(pred_real, True)
+            # combine loss and calculate gradients
+            if self.l1_mask[0,0,0,0] == 1:
+                self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+            else:
+                self.loss_D = self.loss_D_fake
+            self.loss_D.backward()
+        else:
+            # Fake; stop backprop to the generator by detaching fake_B
+            fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)  
+            # we use conditional GANs; we need to feed both input and output to the discriminator
+            # 55 X 6 X H X W
+            pred_fake = self.netD(fake_AB.detach()) # 55 X 1 X 30 X 30
+            self.loss_D_fake = self.criterionGAN(pred_fake, False)
+            # Real
+            real_AB = torch.cat((self.offset_A.squeeze(0), self.offset_B.squeeze(0)), 1)
+            pred_real = self.netD(real_AB)
+            self.loss_D_real = self.criterionGAN(pred_real, True) # not used in current case
+            # combine loss and calculate gradients
+            self.loss_D = self.loss_D_fake
+            self.loss_D.backward()
 
-    def backward_G(self):
+    def backward_G(self, pair_flag=True):
         """Calculate GAN and L1 loss for the generator"""
-        # First, G(A) should fake the discriminator
-        fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)
-        pred_fake = self.netD(fake_AB)
-        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
-        # Second, G(A) = B
-        # self.loss_G_L1 = self.criterionL1(self.fake_B * self.l1_mask, self.real_B * self.l1_mask) * self.opt.lambda_L1
-        alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=4) # 55
-        composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
-        composed_exp = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
-        self.loss_G_L1 = self.criterionL1(composed_exp, self.real_B.squeeze(0)) * self.opt.lambda_L1
+        if pair_flag:
+            # First, G(A) should fake the discriminator
+            fake_AB = torch.cat((self.offset_A, self.offset_fake_B), 1)
+            pred_fake = self.netD(fake_AB)
+            self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            # Second, G(A) = B
+            self.loss_G_L1 = self.criterionL1(self.fake_B * self.l1_mask, self.real_B * self.l1_mask) * self.opt.lambda_L1
+            # combine loss and calculate gradients
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            self.loss_G.backward()
 
-        # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
-        #self.loss_G = self.loss_G_L1 # For debug use, only keep l1 loss
-        self.loss_G.backward()
+            # Just for visual, not used here
+            self.composed_B = self.fake_B
+        else:
+            # First, G(A) should fake the discriminator
+            fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)
+            pred_fake = self.netD(fake_AB)
+            self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+            # Second, G(A) = B
+            alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
+            composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
+            self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
+            self.composed_B = self.composed_B.unsqueeze(0)
+            self.loss_G_L1 = self.criterionL1(self.composed_B, self.real_B) * self.opt.lambda_L1
+            # combine loss and calculate gradients
+            self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            self.loss_G.backward()
 
-    def optimize_parameters(self):
-        self.forward()                   # compute fake images: G(A)
+    def optimize_parameters(self, pair_flag=True):
+        self.forward(pair_flag)                   # compute fake images: G(A)
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero
-        self.backward_D()                # calculate gradients for D
+        self.backward_D(pair_flag)                # calculate gradients for D
         self.optimizer_D.step()          # update D's weights
         # update G
         self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
         self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G()                   # calculate graidents for G
+        self.backward_G(pair_flag)                   # calculate graidents for G
         self.optimizer_G.step()             # udpate G's weights

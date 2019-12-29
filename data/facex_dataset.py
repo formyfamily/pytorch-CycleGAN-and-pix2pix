@@ -64,17 +64,6 @@ class FacexDataset(BaseDataset):
 
         self.mask = torch.FloatTensor(np.load("mask.npy"))[:,:,None]
 
-        #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/Blendshapes_256_exr")  # create a path '/path/to/data/trainA'
-        # self.dir_B = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned")  # create a path '/path/to/data/trainB'
-        #self.dir_A = os.path.join(opt.dataroot, "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo")
-
-        # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size))
-        # self.A_paths = sorted(make_dataset(self.dir_A, opt.max_dataset_size, prefix="20191002_RyanWatson"))   # load images from '/path/to/data/trainA'
-        # self.B_paths = sorted(make_dataset(self.dir_B, opt.max_dataset_size, prefix="20190429_MichaelTrejo"))    # load images from '/path/to/data/trainB'
-
-        btoA = self.opt.direction == 'BtoA'
-        input_nc = self.opt.output_nc if btoA else self.opt.input_nc       # get the number of channels of input image
-        output_nc = self.opt.input_nc if btoA else self.opt.output_nc      # get the number of channels of output image
         self.identity_mode = opt.identity_mode
 
     def load_single_subject(self, index, exp_idx):
@@ -143,23 +132,20 @@ class FacexDataset(BaseDataset):
             num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
             exp_idx = np.random.randint(num_expressions) # Index for single expression
             A_neutral = self.load_single_subject(p_a_idx, exp_idx)
+
+            num_expressions = len(self.ids_dic[p_b_idx]['f_tag'])
             exp_idx = np.random.randint(num_expressions) # Index for single expression
             B_neutral = self.load_single_subject(p_b_idx, exp_idx)
         else: # use neutral face
             A_neutral = self.load_neutral_face(p_a_idx)
             B_neutral = self.load_neutral_face(p_b_idx)
         
-
         if selfrecon == 1: # self reconstruction case
             num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
-
             exp_idx = np.random.randint(num_expressions) # Index for single expression
+            
             A = self.load_single_subject(p_a_idx, exp_idx) # C X H X W
-            exp_idx = np.random.randint(num_expressions) # Index for single expression
             B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
-
-            # diff_exp_idx = np.random.randint(num_expressions) # Index for single expression
-            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, diff_exp_idx) # C X H X W
 
             l1_mask = 1
         elif self.ids_dic[p_a_idx]['source'] == self.ids_dic[p_b_idx]['source']:
@@ -169,9 +155,6 @@ class FacexDataset(BaseDataset):
             A = self.load_single_subject(p_a_idx, exp_idx) # C X H X W
             B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
 
-            # diff_exp_idx = np.random.randint(num_expressions) # Index for single expression
-            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, diff_exp_idx) # C X H X W
-
             l1_mask = 1
         else: # No pair data for current sample
             num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
@@ -180,13 +163,10 @@ class FacexDataset(BaseDataset):
 
             num_expressions = len(self.ids_dic[p_b_idx]['f_tag'])
             exp_idx = np.random.randint(num_expressions) # Index for single expression
-            B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
-
-            # num_expressions = len(self.ids_dic[p_b_idx]['f_tag'])
-            # exp_idx = np.random.randint(num_expressions) # Index for single expression
-            # p_b_diff_exp_data = self.load_single_subject(p_b_idx, exp_idx) # C X H X W
+            B = self.load_single_subject(p_b_idx, exp_idx) # C X H X W, useless in this case
 
             l1_mask = 0
+
         return {'A': torch.cat((A, A_neutral, B_neutral), dim=0), 'B': B, 'A_paths': "A", 'B_paths': "B", 'l1_mask': l1_mask}
 
     def __len__(self):

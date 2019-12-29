@@ -74,6 +74,7 @@ if __name__ == '__main__':
     visualizer = Visualizer(opt)   # create a visualizer that display/save images and plots
     total_iters = 0                # the total number of training iterations
 
+    pair_flag = True
     for epoch in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay + 1):    # outer loop for different epochs; we save the model by <epoch_count>, <epoch_count>+<save_latest_freq>
         epoch_start_time = time.time()  # timer for entire epoch
         iter_data_time = time.time()    # timer for data loading per iteration
@@ -89,21 +90,62 @@ if __name__ == '__main__':
             total_iters += opt.batch_size
             epoch_iter += opt.batch_size
 
-            if i % == 0:
-            
-            model.set_input(data)         # unpack data from dataset and apply preprocessing
-            model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
+            if epoch > opt.alternate_epoch:
+                if i % opt.alternate_iter == 0:
+                    pair_flag = (not pair_flag)
+
+            # pair_flag: True --- Train with paired expression dataset
+            # pair_flag: False --- Train with blendshape datset, optimize alpha by l1 loss
+            if pair_flag:
+                model.set_input(paired_data, pair_flag)         # unpack data from dataset and apply preprocessing
+            else:
+                model.set_input(bs_data, pair_flag)         # unpack data from dataset and apply preprocessing
+            model.optimize_parameters(pair_flag)   # calculate loss functions, get gradients, update network weights
 
             if total_iters % opt.display_freq == 0:   # display images on visdom and save images to a HTML file
                 save_result = total_iters % opt.update_html_freq == 0
                 model.compute_visuals()
-                if not os.path.exists(opt.objpath):
-                    os.makedirs(opt.objpath)
+                if pair_flag:
+                    if not os.path.exists(os.path.join(opt.objpath, "paired_train", str(total_iters))):
+                        os.makedirs(os.path.join(opt.objpath, "paired_train", str(total_iters)))
+                else:
+                    if not os.path.exists(os.path.join(opt.objpath, "bs_train", str(total_iters))):
+                        os.makedirs(os.path.join(opt.objpath, "bs_train", str(total_iters)))
                 for name, image in model.get_current_visuals().items():
-                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
-                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-                    vis_geometry(pc_tensor, save_obj_path)
-                visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
+                    if "offset" not in name:
+                        if pair_flag: # Paired data training
+                            if "composed" not in name: # composed_B is only useful in bs training
+                                save_obj_path = os.path.join(opt.objpath, "paired_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                                pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                vis_geometry(pc_tensor, save_obj_path)
+                        else:
+                            if image.size()[1] == 55:
+                                if "neutral" not in name:
+                                    if "real_A_input" not in name:
+                                        for bs_idx in range(image.size()[1]):
+                                            if not os.path.exists(os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name))):
+                                                os.makedirs(os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name)))
+                                            save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name), str(bs_idx)+".obj")
+                                            pc_tensor = recover_ori(image[0, bs_idx].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                            vis_geometry(pc_tensor, save_obj_path)
+                                    else: # Template blendshape only generate once
+                                        if not os.path.exists(os.path.join(opt.objpath, "bs_train", "%s"%(name))):
+                                            os.makedirs(os.path.join(opt.objpath, "bs_train", "%s"%(name)))
+                                            for bs_idx in range(image.size()[1]):
+                                                save_obj_path = os.path.join(opt.objpath, "bs_train", "%s"%(name), str(bs_idx)+".obj")
+                                                pc_tensor = recover_ori(image[0, bs_idx].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                                vis_geometry(pc_tensor, save_obj_path)
+                                else:
+                                    save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                                    pc_tensor = recover_ori(image[0, 0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                    vis_geometry(pc_tensor, save_obj_path)
+                            else:
+                                save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                                pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                vis_geometry(pc_tensor, save_obj_path)
+
+                if pair_flag:
+                    visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
                 losses = model.get_current_losses()

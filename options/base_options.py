@@ -55,8 +55,10 @@ class BaseOptions():
         parser.add_argument('--load_iter', type=int, default='0', help='which iteration to load? if load_iter > 0, the code will load models by iter_[load_iter]; otherwise, the code will load models by [epoch]')
         parser.add_argument('--verbose', action='store_true', help='if specified, print more debugging information')
         parser.add_argument('--suffix', default='', type=str, help='customized suffix: opt.name = opt.name + suffix: e.g., {model}_{netG}_size{load_size}')
-        parser.add_argument('--identity_mode', type=int, default=0, help='hou to choose input identity face')
+        parser.add_argument('--identity_mode', type=int, default=0, help='how to choose input identity face')
         parser.add_argument('--jsonfile', type=str, help='path of input data json file')
+        parser.add_argument('--alternate_iter', type=int, default=5, help='alternate train with paired dataset or blendshape dataset')
+        parser.add_argument('--alternate_epoch', type=int, default=20, help='from which epoch we start alternate training')
         self.initialized = True
         return parser
 
