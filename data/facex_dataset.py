@@ -12,42 +12,15 @@ def load_img(filename):
     _format = 'EXR-FI' if filename.split(".")[-1] == "exr" else None
     return imageio.imread(filename, format=_format)
 
-def normalize(exp):
-    # exp: H X W X C
-
-    # Normalize data
-    # x mean = -0.03465565666556358
-    # x std = 4.96116828918457
-    # y mean = -1.4577744007110596
-    # y std = 6.710243225097656
-    # z mean = 5.440230369567871
-    # z std = 3.930370330810547
-    x_mean = torch.from_numpy(np.array([-0.03465565666556358]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    x_std = torch.from_numpy(np.array([4.96116828918457]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_mean = torch.from_numpy(np.array([-1.4577744007110596]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    y_std = torch.from_numpy(np.array([6.710243225097656]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_mean = torch.from_numpy(np.array([5.440230369567871]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-    z_std = torch.from_numpy(np.array([3.930370330810547]*256*256).reshape((256, 256))).unsqueeze(-1).float() # H X W X 1
-
-    # Adapt dimension
-
-    normalized_exp_x = (exp[:, :, 0].unsqueeze(-1)-x_mean)/x_std # H X W X 1
-    normalized_exp_y = (exp[:, :, 1].unsqueeze(-1)-y_mean)/y_std
-    normalized_exp_z = (exp[:, :, 2].unsqueeze(-1)-z_mean)/z_std
-
-    normalized_exp = torch.cat((normalized_exp_x, normalized_exp_y, normalized_exp_z), dim=-1) # H X W X 3
-
-    return normalized_exp # H X W X 3
-
 def scale_to_range(exp):
     # x_min =  -10.75, x_max = 11.5546875, y_min = -22.625, y_max = 14.578125, z_min = -6.078125, z_max = 14.125
     image_size = 256
-    x_min = torch.from_numpy(np.array([-10.7578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    x_max = torch.from_numpy(np.array([11.5546875]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_min = torch.from_numpy(np.array([-22.625]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_max = torch.from_numpy(np.array([14.578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_min = torch.from_numpy(np.array([-6.078125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_max = torch.from_numpy(np.array([14.125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    x_min = -10.7578125
+    x_max = 11.5546875
+    y_min = -22.625
+    y_max = 14.578125
+    z_min = -6.078125
+    z_max = 14.125
 
     # Normalize to 0~1
     normalized_exp_x = (exp[:, :, 0].unsqueeze(-1)-x_min)/(x_max-x_min) # H X W X 1
@@ -126,11 +99,7 @@ class FacexDataset(BaseDataset):
 
     def load_neutral_face(self, index):
         if self.ids_dic[index]['source'] == "template":
-            neutral_f_path = os.path.join(self.bs_folder, "Neutral_pointcloud.exr")
-            neutral_img = torch.from_numpy(load_img(neutral_f_path)).float() # H X W X C
-            scaled_neutral = scale_to_range(neutral_img)
-            masked_scaled_neutral = self.mask*scaled_neutral
-            neutral_face = masked_scaled_neutral.transpose(0, 2).transpose(1, 2) # C X H X W
+            neutral_face = self.load_single_subject(index, 0)
         elif self.ids_dic[index]['source'] == "ls":
             neutral_face = self.load_single_subject(index, 1)
         elif self.ids_dic[index]['source'] == "tr":
@@ -222,4 +191,3 @@ class FacexDataset(BaseDataset):
 
     def __len__(self):
         return len(self.ids)*20
-
