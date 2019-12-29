@@ -61,9 +61,13 @@ def vis_geometry(pc_tensor, out_obj_path):
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
-    dataset_size = len(dataset)    # get the number of images in the dataset.
-    print('The number of training images = %d' % dataset_size)
+    opt.dataset_mode = "facex"
+    paired_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    opt.dataset_mode = "facebs"
+    bs_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+
+    dataset_size = len(bs_dataset)    # get the number of images in the dataset.
+    print('The number of training examples = %d' % dataset_size)
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
@@ -76,13 +80,17 @@ if __name__ == '__main__':
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
 
-        for i, data in enumerate(dataset):  # inner loop within one epoch
+        # for i, data in enumerate(dataset):  # inner loop within one epoch
+        for i, (paired_data, bs_data) in enumerate(zip(paired_dataset, bs_dataset)):
             iter_start_time = time.time()  # timer for computation per iteration
             if total_iters % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
 
             total_iters += opt.batch_size
             epoch_iter += opt.batch_size
+
+            if i % == 0:
+            
             model.set_input(data)         # unpack data from dataset and apply preprocessing
             model.optimize_parameters()   # calculate loss functions, get gradients, update network weights
 
@@ -92,10 +100,9 @@ if __name__ == '__main__':
                 if not os.path.exists(opt.objpath):
                     os.makedirs(opt.objpath)
                 for name, image in model.get_current_visuals().items():
-                    if name != "real_A":
-                        save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
-                        pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-                        vis_geometry(pc_tensor, save_obj_path)
+                    save_obj_path = os.path.join(opt.objpath, "%d_%s.obj"%(total_iters, name))
+                    pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                    vis_geometry(pc_tensor, save_obj_path)
                 visualizer.display_current_results(model.get_current_visuals(), epoch, save_result)
 
             if total_iters % opt.print_freq == 0:    # print training losses and save logging information to the disk
