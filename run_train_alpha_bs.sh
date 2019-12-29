@@ -15,4 +15,5 @@ python train.py \
 --jsonfile ./train_all_data.json \
 --alternate_epoch 30 \
 --alternate_iter 5 \
---display_freq 300
+--display_freq 300 \
+--print_freq 10
