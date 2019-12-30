@@ -1,0 +1,14 @@
+python test.py \
+--name face_pix2pix_alpha_bs_no_gan \
+--input_nc 9 \
+--no_dropout \
+--objpath ./result_obj_no_gan_test \
+--gpu_ids 7 \
+--dataroot /home/ICT2000/jli/local/data \
+--model pix2pixbs \
+--direction AtoB \
+--load_size 256 \
+--no_flip \
+--num_threads 0 \
+--jsonfile ./train_all_data.json \
+--num_test 10
