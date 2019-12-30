@@ -5,7 +5,7 @@ python train.py \
 --input_nc 9 \
 --lambda_L1 100 \
 --no_dropout \
---objpath ./result_obj \
+--objpath ./result_obj_no_gan \
 --gpu_ids 8 \
 --dataroot /home/ICT2000/jli/local/data \
 --model pix2pixbs \
