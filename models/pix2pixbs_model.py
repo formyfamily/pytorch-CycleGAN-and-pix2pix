@@ -44,8 +44,12 @@ class Pix2PixBSModel(BaseModel):
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseModel.__init__(self, opt)
+        self.no_gan = opt.no_gan 
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
+        if self.no_gan:
+            self.loss_names = ['G_L1']
+        else:
+            self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         # self.visual_names = ['real_A', 'fake_B', 'real_B']
@@ -78,6 +82,7 @@ class Pix2PixBSModel(BaseModel):
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+
 
     def set_input(self, input, pair_flag=True):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -179,16 +184,45 @@ class Pix2PixBSModel(BaseModel):
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
             self.loss_G.backward()
+    
+    def backward_G_no_gan(self, pair_flag=True):
+        """Calculate GAN and L1 loss for the generator"""
+        if pair_flag:
+            # Second, G(A) = B
+            self.loss_G_L1 = self.criterionL1(self.fake_B * self.l1_mask, self.real_B * self.l1_mask) * self.opt.lambda_L1
+            # self.loss_G_GAN = self.loss_G_L1 # Just for not changing visualization setting
+            # combine loss and calculate gradients
+            self.loss_G = self.loss_G_L1
+            self.loss_G.backward()
+
+            # Just for visual, not used here
+            self.composed_B = self.fake_B
+        else:
+            # Second, G(A) = B
+            alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
+            composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
+            self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
+            self.composed_B = self.composed_B.unsqueeze(0)
+            self.loss_G_L1 = self.criterionL1(self.composed_B, self.real_B) * self.opt.lambda_L1
+            # self.loss_G_GAN = self.loss_G_L1 # Just for not changing visualization setting
+            # combine loss and calculate gradients
+            self.loss_G = self.loss_G_L1
+            self.loss_G.backward()
 
     def optimize_parameters(self, pair_flag=True):
         self.forward(pair_flag)                   # compute fake images: G(A)
-        # update D
-        self.set_requires_grad(self.netD, True)  # enable backprop for D
-        self.optimizer_D.zero_grad()     # set D's gradients to zero
-        self.backward_D(pair_flag)                # calculate gradients for D
-        self.optimizer_D.step()          # update D's weights
-        # update G
-        self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
-        self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G(pair_flag)                   # calculate graidents for G
-        self.optimizer_G.step()             # udpate G's weights
+        if self.no_gan:
+            self.optimizer_G.zero_grad()        # set G's gradients to zero
+            self.backward_G_no_gan(pair_flag)                   # calculate graidents for G
+            self.optimizer_G.step()             # udpate G's weights
+        else:
+            # update D
+            self.set_requires_grad(self.netD, True)  # enable backprop for D
+            self.optimizer_D.zero_grad()     # set D's gradients to zero
+            self.backward_D(pair_flag)                # calculate gradients for D
+            self.optimizer_D.step()          # update D's weights
+            # update G
+            self.set_requires_grad(self.netD, False)  # D requires no gradients when optimizing G
+            self.optimizer_G.zero_grad()        # set G's gradients to zero
+            self.backward_G(pair_flag)                   # calculate graidents for G
+            self.optimizer_G.step()             # udpate G's weights
