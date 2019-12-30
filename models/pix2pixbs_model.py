@@ -109,7 +109,7 @@ class Pix2PixBSModel(BaseModel):
             self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral # 1 X 55 X 3 X H X W, subject neutral + template bs offsets
             self.alpha_idx = input['alpha'] # BS(1) indicate which line in self.alpha_mat we should use
 
-    def forward(self, pair_flag=True):
+    def forward(self, pair_flag=False):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         if pair_flag:
             self.fake_B = self.netG(self.real_A)  # G(A) 1 X 3 X H X W
@@ -122,6 +122,11 @@ class Pix2PixBSModel(BaseModel):
             self.offset_A = (self.real_A_input - self.A_neutral)*10 # Template blendshape offsets 1 X 55 X 3 X H X W
             self.offset_B = (self.real_B.unsqueeze(0) - self.B_neutral)*10 # useless in current case
             self.offset_fake_B = (self.fake_B - self.B_neutral)*10 # 1 X 55 X 3 X H X W, personalized blendshape offsets
+
+            alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
+            composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
+            self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
+            self.composed_B = self.composed_B.unsqueeze(0)
 
     def backward_D(self, pair_flag=True):
         """Calculate GAN loss for the discriminator"""
@@ -176,10 +181,10 @@ class Pix2PixBSModel(BaseModel):
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # Second, G(A) = B
-            alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
-            composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
-            self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
-            self.composed_B = self.composed_B.unsqueeze(0)
+            # alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
+            # composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
+            # self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
+            # self.composed_B = self.composed_B.unsqueeze(0)
             self.loss_G_L1 = self.criterionL1(self.composed_B, self.real_B) * self.opt.lambda_L1
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1

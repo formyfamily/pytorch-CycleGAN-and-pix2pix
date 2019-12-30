@@ -41,13 +41,12 @@ def recover_ori(exp):
     # exp: H X W X C
     exp = (exp+1)/2 # 0~1
 
-    image_size = 256
-    x_min = torch.from_numpy(np.array([-10.7578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    x_max = torch.from_numpy(np.array([11.5546875]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_min = torch.from_numpy(np.array([-22.625]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_max = torch.from_numpy(np.array([14.578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_min = torch.from_numpy(np.array([-6.078125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_max = torch.from_numpy(np.array([14.125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    x_min = -10.7578125
+    x_max = 11.5546875
+    y_min = -22.625
+    y_max = 14.578125
+    z_min = -6.078125
+    z_max = 14.125
 
     ori_exp_x = exp[:, :, 0].unsqueeze(-1)*(x_max-x_min)+x_min # H X W X 1
     ori_exp_y = exp[:, :, 1].unsqueeze(-1)*(y_max-y_min)+y_min 
@@ -75,7 +74,12 @@ if __name__ == '__main__':
     opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
     opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
-    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    
+    opt.dataset_mode = "facex"
+    paired_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    opt.dataset_mode = "facebs"
+    bs_dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
+    
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
     # create a website
@@ -89,21 +93,60 @@ if __name__ == '__main__':
     # For [CycleGAN]: It should not affect CycleGAN as CycleGAN uses instancenorm without dropout.
     if opt.eval:
         model.eval()
-    for i, data in enumerate(dataset):
+    pair_flag = False
+    total_iters = 0
+    # for i, data in enumerate(dataset):
+    for i, (paired_data, bs_data) in enumerate(zip(paired_dataset, bs_dataset)):
         if i >= opt.num_test:  # only apply our model to opt.num_test images.
             break
-        model.set_input(data)  # unpack data from data loader
+        if pair_flag:
+            model.set_input(paired_data, pair_flag)  # unpack data from data loader
+        else:
+            model.set_input(bs_data, pair_flag)
         model.test()           # run inference
-        visuals = model.get_current_visuals()  # get image results
-        img_path = model.get_image_paths()     # get image paths
-        if i % 5 == 0:  # save images to an HTML file
-            print('processing (%04d)-th image... %s' % (i, img_path))                
-        if not os.path.exists(opt.objpath):
-            os.makedirs(opt.objpath)
+        # visuals = model.get_current_visuals()  # get image results
+        # img_path = model.get_image_paths()     # get image paths
+        # if i % 5 == 0:  # save images to an HTML file
+        #     print('processing (%04d)-th image... %s' % (i, img_path))                
+    
+        if pair_flag:
+            if not os.path.exists(os.path.join(opt.objpath, "paired_train", str(total_iters))):
+                os.makedirs(os.path.join(opt.objpath, "paired_train", str(total_iters)))
+        else:
+            if not os.path.exists(os.path.join(opt.objpath, "bs_train", str(total_iters))):
+                os.makedirs(os.path.join(opt.objpath, "bs_train", str(total_iters)))
         for name, image in model.get_current_visuals().items():
-            if name != "real_A":
-                save_obj_path = os.path.join(opt.objpath, opt.name, "%d_%s.obj"%(i, name))
-                pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
-                vis_geometry(pc_tensor, save_obj_path)
-        save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
+            if "offset" not in name:
+                if pair_flag: # Paired data training
+                    if "composed" not in name: # composed_B is only useful in bs training
+                        save_obj_path = os.path.join(opt.objpath, "paired_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                        pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                        vis_geometry(pc_tensor, save_obj_path)
+                else:
+                    if image.size()[1] == 55:
+                        if "neutral" not in name:
+                            if "real_A_input" not in name:
+                                for bs_idx in range(image.size()[1]):
+                                    if not os.path.exists(os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name))):
+                                        os.makedirs(os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name)))
+                                    save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s"%(total_iters, name), str(bs_idx)+".obj")
+                                    pc_tensor = recover_ori(image[0, bs_idx].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                    vis_geometry(pc_tensor, save_obj_path)
+                            else: # Template blendshape only generate once
+                                if not os.path.exists(os.path.join(opt.objpath, "bs_train", "%s"%(name))):
+                                    os.makedirs(os.path.join(opt.objpath, "bs_train", "%s"%(name)))
+                                    for bs_idx in range(image.size()[1]):
+                                        save_obj_path = os.path.join(opt.objpath, "bs_train", "%s"%(name), str(bs_idx)+".obj")
+                                        pc_tensor = recover_ori(image[0, bs_idx].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                                        vis_geometry(pc_tensor, save_obj_path)
+                        else:
+                            save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                            pc_tensor = recover_ori(image[0, 0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                            vis_geometry(pc_tensor, save_obj_path)
+                    else:
+                        save_obj_path = os.path.join(opt.objpath, "bs_train", str(total_iters), "%d_%s.obj"%(total_iters, name))
+                        pc_tensor = recover_ori(image[0].transpose(0, 2).transpose(0, 1).detach().cpu()).transpose(0, 2).transpose(1, 2)
+                        vis_geometry(pc_tensor, save_obj_path)
+        total_iters += 1
+        # save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize)
     webpage.save()  # save the HTML

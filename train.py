@@ -33,13 +33,12 @@ def recover_ori(exp):
     # exp: H X W X C
     exp = (exp+1)/2 # 0~1
 
-    image_size = 256
-    x_min = torch.from_numpy(np.array([-10.7578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    x_max = torch.from_numpy(np.array([11.5546875]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_min = torch.from_numpy(np.array([-22.625]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    y_max = torch.from_numpy(np.array([14.578125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_min = torch.from_numpy(np.array([-6.078125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
-    z_max = torch.from_numpy(np.array([14.125]*image_size*image_size).reshape((image_size, image_size))).unsqueeze(-1).float() # H X W X 1
+    x_min = -10.7578125
+    x_max = 11.5546875
+    y_min = -22.625
+    y_max = 14.578125
+    z_min = -6.078125
+    z_max = 14.125
 
     ori_exp_x = exp[:, :, 0].unsqueeze(-1)*(x_max-x_min)+x_min # H X W X 1
     ori_exp_y = exp[:, :, 1].unsqueeze(-1)*(y_max-y_min)+y_min 

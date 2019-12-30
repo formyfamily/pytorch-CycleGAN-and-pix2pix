@@ -59,6 +59,7 @@ class BaseOptions():
         parser.add_argument('--jsonfile', type=str, help='path of input data json file')
         parser.add_argument('--alternate_iter', type=int, default=5, help='alternate train with paired dataset or blendshape dataset')
         parser.add_argument('--alternate_epoch', type=int, default=20, help='from which epoch we start alternate training')
+        parser.add_argument('--no_gan', action='store_true', help='do not use GAN training, rely on l1 loss, reconstruction loss, composed l1 loss only')
         self.initialized = True
         return parser
 
