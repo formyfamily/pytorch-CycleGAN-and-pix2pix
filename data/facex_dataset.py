@@ -168,4 +168,4 @@ class FacexDataset(BaseDataset):
         return {'A': torch.cat((A, A_neutral, B_neutral), dim=0), 'B': B, 'A_paths': "A", 'B_paths': "B", 'l1_mask': l1_mask}
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.ids)*20

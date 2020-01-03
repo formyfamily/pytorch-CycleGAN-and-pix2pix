@@ -154,4 +154,4 @@ class FacebsDataset(BaseDataset):
         # 55 X (3*C) X H X W, C X H X W
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.ids)*20
