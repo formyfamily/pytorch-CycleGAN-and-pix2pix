@@ -11,4 +11,4 @@ python train_texture.py \
 --num_threads 0 \
 --jsonfile ./train_all_data.json \
 --display_freq 300 \
---print_freq 1
+--print_freq 10
