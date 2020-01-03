@@ -1,12 +1,12 @@
 python train.py \
 --no_gan \
---name face_pix2pix_alpha_bs_no_gan_less_iter \
---display_port 34567 \
+--name face_pix2pix_alpha_bs_no_gan_new \
+--display_port 22222 \
 --input_nc 9 \
 --lambda_L1 100 \
 --no_dropout \
---objpath ./result_obj_no_gan_less_iter \
---gpu_ids 6 \
+--objpath ./result_obj_no_gan_new \
+--gpu_ids 4 \
 --dataroot /home/ICT2000/jli/local/data \
 --model pix2pixbs \
 --direction AtoB \
