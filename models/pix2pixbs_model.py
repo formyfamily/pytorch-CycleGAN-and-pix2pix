@@ -109,7 +109,7 @@ class Pix2PixBSModel(BaseModel):
             self.simple_B = self.real_A_input-self.A_neutral+self.B_neutral # 1 X 55 X 3 X H X W, subject neutral + template bs offsets
             self.alpha_idx = input['alpha'] # BS(1) indicate which line in self.alpha_mat we should use
 
-    def forward(self, pair_flag=False):
+    def forward(self, pair_flag=True):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         if pair_flag:
             self.fake_B = self.netG(self.real_A)  # G(A) 1 X 3 X H X W
@@ -132,11 +132,11 @@ class Pix2PixBSModel(BaseModel):
         """Calculate GAN loss for the discriminator"""
         if pair_flag:
             # Fake; stop backprop to the generator by detaching fake_B
-            fake_AB = torch.cat((self.offset_A, self.offset_fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+            fake_AB = torch.cat((self.real_A_input, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
             pred_fake = self.netD(fake_AB.detach())
             self.loss_D_fake = self.criterionGAN(pred_fake, False)
             # Real
-            real_AB = torch.cat((self.offset_A, self.offset_B), 1)
+            real_AB = torch.cat((self.real_A_input, self.real_B), 1)
             pred_real = self.netD(real_AB)
             self.loss_D_real = self.criterionGAN(pred_real, True)
             # combine loss and calculate gradients
@@ -147,15 +147,15 @@ class Pix2PixBSModel(BaseModel):
             self.loss_D.backward()
         else:
             # Fake; stop backprop to the generator by detaching fake_B
-            fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)  
+            fake_AB = torch.cat((self.real_A_input.squeeze(0), self.fake_B.squeeze(0)), 1)  
             # we use conditional GANs; we need to feed both input and output to the discriminator
             # 55 X 6 X H X W
             pred_fake = self.netD(fake_AB.detach()) # 55 X 1 X 30 X 30
             self.loss_D_fake = self.criterionGAN(pred_fake, False)
             # Real
-            real_AB = torch.cat((self.offset_A.squeeze(0), self.offset_B.squeeze(0)), 1)
+            real_AB = torch.cat((self.real_A_input.squeeze(0), self.fake_B.squeeze(0)), 1)
             pred_real = self.netD(real_AB)
-            self.loss_D_real = self.criterionGAN(pred_real, True) # not used in current case
+            self.loss_D_real = self.criterionGAN(pred_real, True)*0 # not used in current case
             # combine loss and calculate gradients
             self.loss_D = self.loss_D_fake
             self.loss_D.backward()
@@ -164,7 +164,7 @@ class Pix2PixBSModel(BaseModel):
         """Calculate GAN and L1 loss for the generator"""
         if pair_flag:
             # First, G(A) should fake the discriminator
-            fake_AB = torch.cat((self.offset_A, self.offset_fake_B), 1)
+            fake_AB = torch.cat((self.real_A_input, self.fake_B), 1)
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # Second, G(A) = B
@@ -177,14 +177,10 @@ class Pix2PixBSModel(BaseModel):
             self.composed_B = self.fake_B
         else:
             # First, G(A) should fake the discriminator
-            fake_AB = torch.cat((self.offset_A.squeeze(0), self.offset_fake_B.squeeze(0)), 1)
+            fake_AB = torch.cat((self.real_A_input.squeeze(0), self.fake_B.squeeze(0)), 1)
             pred_fake = self.netD(fake_AB)
             self.loss_G_GAN = self.criterionGAN(pred_fake, True)
             # Second, G(A) = B
-            # alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
-            # composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
-            # self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
-            # self.composed_B = self.composed_B.unsqueeze(0)
             self.loss_G_L1 = self.criterionL1(self.composed_B, self.real_B) * self.opt.lambda_L1
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
@@ -204,10 +200,6 @@ class Pix2PixBSModel(BaseModel):
             self.composed_B = self.fake_B
         else:
             # Second, G(A) = B
-            alpha_params = self.alpha_mat[self.alpha_idx, :].squeeze(0).clamp(min=0, max=2) # 55
-            composed_offsets = (self.fake_B-self.B_neutral).squeeze(0)*alpha_params[:, None, None, None] # 55 X 3 X H X W
-            self.composed_B = self.B_neutral.squeeze(0)[0, :, :, :] + composed_offsets.sum(dim=0) # 3 X H X W
-            self.composed_B = self.composed_B.unsqueeze(0)
             self.loss_G_L1 = self.criterionL1(self.composed_B, self.real_B) * self.opt.lambda_L1
             # self.loss_G_GAN = self.loss_G_L1 # Just for not changing visualization setting
             # combine loss and calculate gradients
