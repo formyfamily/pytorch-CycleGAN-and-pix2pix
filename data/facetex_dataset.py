@@ -56,13 +56,18 @@ class FacetexDataset(BaseDataset):
         for k in self.ids_dic.keys():
             self.ids.append(int(k))
 
-        self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned"
-        self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/PointCloud_Aligned"
+        # self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned"
+        # self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/PointCloud_Aligned"
 
-        self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo"
-        self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/DiffuseAlbedo"
+        # self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo"
+        # self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/DiffuseAlbedo"
+        self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/PointCloud_Aligned"
+        self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/PointCloud_Aligned"
 
-        self.mask = torch.FloatTensor(np.load("mask.npy"))[:,:,None]
+        self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/DiffuseAlbedo"
+        self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/DiffuseAlbedo"
+
+        self.mask = torch.FloatTensor(np.load("mask_128.npy"))[:,:,None]
 
     def load_single_subject(self, index, exp_idx, load_geo=True):
         source = self.ids_dic[index]['source']

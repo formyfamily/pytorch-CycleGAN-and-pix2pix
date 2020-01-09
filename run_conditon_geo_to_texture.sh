@@ -1,10 +1,10 @@
 python train_texture.py \
---name face_pix2pix_cond_geo2tex \
---display_port 12333 \
+--name face_pix2pix_cond_geo2tex_128 \
+--display_port 12334 \
 --input_nc 6 \
 --lambda_L1 100 \
 --no_dropout \
---gpu_ids 5 \
+--gpu_ids 4 \
 --dataroot /home/ICT2000/jli/local/data \
 --model pix2pixtex \
 --no_flip \
