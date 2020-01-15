@@ -42,6 +42,45 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256):
         links.append(image_name)
     webpage.add_images(ims, txts, links, width=width)
 
+def save_bs_images(visuals, image_dir, sub_idx, aspect_ratio=1.0, width=256):
+    """Save images to the disk.
+
+    Parameters:
+        webpage (the HTML class) -- the HTML webpage class that stores these imaegs (see html.py for more details)
+        visuals (OrderedDict)    -- an ordered dictionary that stores (name, images (either tensor or numpy) ) pairs
+        image_path (str)         -- the string is used to create image paths
+        aspect_ratio (float)     -- the aspect ratio of saved images
+        width (int)              -- the images will be resized to width x width
+
+    This function will save images stored in 'visuals' to the HTML file specified by 'webpage'.
+    """
+    # image_dir = webpage.get_image_dir()
+    # short_path = ntpath.basename(image_path[0])
+    # name = os.path.splitext(short_path)[0]
+
+    # webpage.add_header(name)
+    # ims, txts, links = [], [], []
+    dest_dir_path = os.path.join(image_dir, str(sub_idx))
+    if not os.path.exists(dest_dir_path):
+        os.makedirs(dest_dir_path)
+
+    for label, im_data in visuals.items():
+        print("im_data:{0}".format(im_data.size()))
+        if im_data.size()[1] == 55:
+            for bs_idx in range(im_data.size()[1]):
+                im = util.tensor2im(im_data[:, bs_idx, :, :, :])
+                image_name = '%s_%s.png' % (label, str(bs_idx))
+                save_path = os.path.join(dest_dir_path, image_name)
+                util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+
+        else:
+            im = util.tensor2im(im_data)
+            image_name = '%s.png' % (label)
+            save_path = os.path.join(dest_dir_path, image_name)
+            util.save_image(im, save_path, aspect_ratio=aspect_ratio)
+        # ims.append(image_name)
+        
+
 
 class Visualizer():
     """This class includes several functions that can display/save images and print/save logging information.

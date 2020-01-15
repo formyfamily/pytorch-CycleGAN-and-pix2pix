@@ -7,6 +7,8 @@ import random
 import torch
 import numpy as np
 import json
+import scipy.io
+import scipy.ndimage
 
 def load_img(filename):
     _format = 'EXR-FI' if filename.split(".")[-1] == "exr" else None
@@ -28,6 +30,28 @@ def scale_to_range(exp):
     normalized_exp = torch.cat((normalized_exp_x, normalized_exp_y, normalized_exp_z), dim=-1) # H X W X 3
 
     scaled_exp = normalized_exp*2-1 # Scale to -1 ~1
+
+    return scaled_exp
+
+def batch_scale_to_range_offset(exp):
+    # exp: N X H X W X C
+
+    # x_min =  -10.7578125, x_max = 11.5546875, y_min = -22.625, y_max = 14.578125, z_min = -6.078125, z_max = 14.125
+    x_min = -10.7578125
+    x_max = 11.5546875
+    y_min = -22.625
+    y_max = 14.578125
+    z_min = -6.078125
+    z_max = 14.125
+
+    # Normalize to 0~1
+    normalized_exp_x = (exp[:, :, :, 0].unsqueeze(-1))/(x_max-x_min) # N X H X W X 1
+    normalized_exp_y = (exp[:, :, :, 1].unsqueeze(-1))/(y_max-y_min)
+    normalized_exp_z = (exp[:, :, :, 2].unsqueeze(-1))/(z_max-z_min)
+    
+    normalized_exp = torch.cat((normalized_exp_x, normalized_exp_y, normalized_exp_z), dim=-1) # N X H X W X 3
+
+    scaled_exp = normalized_exp*2 # Scale to -1 ~1
 
     return scaled_exp
 
@@ -56,23 +80,27 @@ class FacetexTestDataset(BaseDataset):
         for k in self.ids_dic.keys():
             self.ids.append(int(k))
 
-        # self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned"
-        # self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/PointCloud_Aligned"
+        self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/PointCloud_Aligned"
+        self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/PointCloud_Aligned"
 
-        # self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo"
-        # self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/DiffuseAlbedo"
-        self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/PointCloud_Aligned"
-        self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/PointCloud_Aligned"
+        self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/256/DiffuseAlbedo"
+        self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/256/DiffuseAlbedo"
 
-        self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/DiffuseAlbedo"
-        self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/DiffuseAlbedo"
+        # self.ls_geo_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/PointCloud_Aligned"
+        # self.tr_geo_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/PointCloud_Aligned"
 
-        self.mask = torch.FloatTensor(np.load("mask_128.npy"))[:,:,None]
+        # self.ls_tex_folder = "/home/ICT2000/jli/local/data/LightStageFaceDB/128/DiffuseAlbedo"
+        # self.tr_tex_folder = "/home/ICT2000/jli/local/data/InfiniteRealities_Triplegangers/128/DiffuseAlbedo"
+
+        self.mask = torch.FloatTensor(np.load("mask.npy"))[:,:,None]
+
+        self.template_bs_offsets, _ = self.load_blendshapes() # 55 X H X W X C
 
     def load_blendshapes(self):
-        blendshape_folder = "/home/ICT2000/jli/local/data/Blendshapes_128_exr" 
-        bs_mask_folder = "/home/ICT2000/jli/mnt/glab2/jiaman/github/face_auto_rigging/codes/bs_mask_npy_128"
-        bs_order_txt = "/home/ICT2000/jli/mnt/glab2/Users/yajie/Siggraph2020_AutoRigging/BlendshapeOrder_12_6.txt"
+        mount_folder = "/home/ICT2000/jli"
+
+        blendshape_folder = "/home/ICT2000/jli/local/data/Blendshapes_256_exr" 
+        bs_order_txt = os.path.join(mount_folder, "mnt/glab2/Users/yajie/Siggraph2020_AutoRigging/BlendshapeOrder_12_6.txt")
         exr_files = os.listdir(blendshape_folder)
         
         # Load neutral face
@@ -84,29 +112,36 @@ class FacetexTestDataset(BaseDataset):
         
         bs_img_list = []
         mask_list = []
+        cnt = 0
         for ori_line in lines:
             obj_name = ori_line.split()[0]
             f_tag = obj_name.replace('.obj', '')
 
             f_path = os.path.join(blendshape_folder, f_tag+"_pointcloud.exr")
-            bs_img = torch.from_numpy(load_img(f_path)).float() # H X W X C
-            bs_img_list.append(bs_img)
+            bs_img_offset = torch.from_numpy(load_img(f_path)).float()-neutral_bs # H X W X C
 
-            mask_path = os.path.join(bs_mask_folder, f_tag+"_pointcloud.npy")
-            mask_data = torch.from_numpy(np.load(mask_path)).float() # H X W
+            bs_img_mask = bs_img_offset.norm(p=2, dim=2) # H X W
+            bs_img_offset = bs_img_offset * ((bs_img_mask>0.03).float()[:,:,None])
+            bs_img_list.append(bs_img_offset)
+            
+            mask_data = (bs_img_mask>0.03).float()
+            mask_data = torch.FloatTensor(scipy.ndimage.distance_transform_edt((mask_data==0).numpy()))
+            mask_data = mask_data/5
+            mask_data = 1-torch.clamp(mask_data, 0, 1)
+            cnt = cnt+1
+
+            # import pdb
+            # pdb.set_trace()
+
             mask_list.append(mask_data)
 
         bs_img_list = torch.stack(bs_img_list) # 55 X H X W X C
         mask_list = torch.stack(mask_list) # 55 X H X W
 
-        scaled_bs_img_list = batch_scale_to_range(bs_img_list) # 55 X H X W X C
-        scaled_template_neutral = batch_scale_to_range(neutral_bs[None, :, :, :]) # 1 X H X W X C
-        bs_offsets = scaled_bs_img_list - scaled_template_neutral
-        masked_bs_offsets = mask_list[:, :, :, None] * bs_offsets # 55 X H X W X C
+        scaled_bs_img_list = batch_scale_to_range_offset(bs_img_list) # 55 X H X W X C
 
-        return masked_bs_offsets, mask_list
+        return scaled_bs_img_list, mask_list
         # 55 X H X W X C, 55 X H X W
-
 
     def load_single_subject(self, index, exp_idx, load_geo=True):
         source = self.ids_dic[index]['source']
@@ -163,19 +198,24 @@ class FacetexTestDataset(BaseDataset):
             A_paths (str)    -- image paths
             B_paths (str)    -- image paths
         """
-        index %= len(self.ids)
         if index == 0:
             return self.__getitem__(index+1) # Skip the template since template does not have corresponding textures
+        
         p_a_idx = str(index)
 
-        A_neutral_tex = self.load_neutral_face(p_a_idx, load_geo=False)
-        
-        num_expressions = len(self.ids_dic[p_a_idx]['f_tag'])
-        exp_idx = np.random.randint(num_expressions) # Index for single expression
-        A_geo = self.load_single_subject(p_a_idx, exp_idx, load_geo=True) # C X H X W
-        A_tex = self.load_single_subject(p_a_idx, exp_idx, load_geo=False)
-           
-        return {'A': torch.cat((A_neutral_tex, A_geo), dim=0), 'B': A_tex}
+        A_neutral_tex = self.load_neutral_face(p_a_idx, load_geo=False) # C X H X W
+        A_neutral_geo = self.load_neutral_face(p_a_idx, load_geo=True) # C X H X W
+
+        A_bs_list = []
+        for bs_idx in range(55):
+            bs_offset = self.template_bs_offsets[bs_idx, :, :, :] # H X W X C
+            A_bs = A_neutral_geo + bs_offset.transpose(0, 2).transpose(1, 2)
+            A_bs_list.append(A_bs)
+        A_bs_list = torch.stack(A_bs_list) # 55 X C X H X W
+        _, _, h, w = A_bs_list.size()
+        A_geo = A_bs_list.view(-1, h, w) # (55*C) X H X W
+
+        return {'A': torch.cat((A_neutral_tex, A_geo), dim=0), 'B': A_neutral_tex}
 
     def __len__(self):
-        return len(self.ids)*20
+        return len(self.ids)

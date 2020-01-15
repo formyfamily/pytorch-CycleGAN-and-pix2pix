@@ -30,7 +30,7 @@ class Pix2PixTexModel(BaseModel):
         """
         # changing the default values to match the pix2pix paper (https://phillipi.github.io/pix2pix/)
         # parser.set_defaults(norm='batch', netG='unet_256', dataset_mode='aligned')
-        parser.set_defaults(norm='instance', netG='unet_128', dataset_mode='facetex')
+        parser.set_defaults(norm='instance', netG='unet_256')
         if is_train:
             parser.set_defaults(pool_size=0, gan_mode='vanilla')
             parser.add_argument('--lambda_L1', type=float, default=100.0, help='weight for L1 loss')
@@ -48,7 +48,10 @@ class Pix2PixTexModel(BaseModel):
         self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
 
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
-        self.visual_names = ['neutral_tex', 'exp_geo', 'fake_B', 'real_B']
+        if self.isTrain:
+            self.visual_names = ['neutral_tex', 'exp_geo', 'fake_B', 'real_B']
+        else:
+            self.visual_names = ['neutral_tex', 'fake_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
         if self.isTrain:
             self.model_names = ['G', 'D']
@@ -81,15 +84,32 @@ class Pix2PixTexModel(BaseModel):
 
         The option 'direction' can be used to swap images in domain A and domain B.
         """
-        self.real_A = input['A'].to(self.device)
-        self.neutral_tex = self.real_A[:, 0:3] # neutral face texture
-        self.exp_geo = self.real_A[:, 3:6] # expression face geometry
-        self.real_B = input['B'].to(self.device) # expression face texture
+        if self.isTrain:
+            self.real_A = input['A'].to(self.device)
+            self.neutral_tex = self.real_A[:, 0:3] # neutral face texture
+            self.exp_geo = self.real_A[:, 3:6] # expression face geometry
+            self.real_B = input['B'].to(self.device) # expression face texture
+        else:
+            self.real_A = input['A'].to(self.device) # BS X (C+55*C) X H X W
+            self.neutral_tex = self.real_A[:, 0:3] # neutral face texture BS X C X H X W
+            self.exp_geo = self.real_A[:, 3:] # expression face geometry, blendshape geometry BS X (55*3)X H X W
+            batch_size, _, h, w = self.exp_geo.size()
+            self.exp_geo = self.exp_geo.view(batch_size, 55, 3, h, w) # BS X 55 X C X H X W
+            self.real_B = input['B'].to(self.device) # expression face texture BS X C X H X W
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B = self.netG(self.real_A)  # G(A)
-        
+        if self.isTrain:
+            self.fake_B = self.netG(self.real_A)  # G(A)
+        else:
+            tex_list = []
+            for i in range(55): # 55 blendshapes
+                model_input = torch.cat((self.neutral_tex, self.exp_geo[:, i, :, :, :]), dim=1)
+                bs_tex = self.netG(model_input) # BS X C X H X W
+                tex_list.append(bs_tex)
+            self.fake_B = torch.stack(tex_list) # 55 X BS X C X H X W
+            self.fake_B = self.fake_B.transpose(0, 1) # BS X 55 X C X H X W
+
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""
         # Fake; stop backprop to the generator by detaching fake_B
